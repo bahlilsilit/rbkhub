@@ -1,203 +1,310 @@
---[[ 
-    ============================================================
-    RBK REMOTE SPY V6 - ULTIMATE STABILITY (FIXED)
-    ============================================================
-    Developer: RbkHub
-    Fixes:
-    - Replaced hookmetamethod with getrawmetatable (More stable for Mobile).
-    - Added Debug Console logs to verify hooks.
-    - Improved UI parent handling for better visibility.
-    - Added "FORCE START" to bypass any potential init issues.
-    ============================================================
-]]
+-- REMOTE SPY ULTIMATE V3 ⚡ - DYNAMIC GROUPING
+-- Grouped logs by unique Remote for maximum organization.
+-- Persistent, Stealth, and Highly Organized.
 
-local VALID_KEY = "RBKHUBSPY2024"
-local KEY_SITE = "https://pastebin.com/raw/yourkey"
-
-local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
 
--- CONFIG GLOBAL
-getgenv().RbkConfig = {
-    Enabled = true,
-    Captures = {},
-    Blocked = {},
-}
+local LocalPlayer = Players.LocalPlayer
+local ParentUI = (gethui and gethui()) or CoreGui
 
--- THEME
+if CoreGui:FindFirstChild("RSpy_Ultimate_V3") then
+    CoreGui:FindFirstChild("RSpy_Ultimate_V3"):Destroy()
+end
+
+-- Design
 local Theme = {
-    Main = Color3.fromRGB(15, 15, 20),
-    Accent = Color3.fromRGB(0, 255, 150),
-    Secondary = Color3.fromRGB(25, 25, 30),
-    Text = Color3.fromRGB(240, 240, 240)
+    Bg = Color3.fromRGB(13, 13, 15),
+    Sidebar = Color3.fromRGB(20, 20, 24),
+    Main = Color3.fromRGB(15, 15, 18),
+    Accent = Color3.fromRGB(0, 200, 255),
+    AccentSecondary = Color3.fromRGB(0, 150, 220),
+    Text = Color3.fromRGB(230, 230, 240),
+    Muted = Color3.fromRGB(140, 140, 155),
+    Border = Color3.fromRGB(35, 35, 42),
+    RemoteEvent = Color3.fromRGB(0, 255, 170),
+    RemoteFunction = Color3.fromRGB(255, 170, 0)
 }
 
--- UTILS
-local function create(className, props, parent)
-    local obj = Instance.new(className)
-    for k,v in pairs(props) do obj[k]=v end
-    if parent then obj.Parent = parent end
-    return obj
+local Font = Enum.Font.Code
+
+-- State Management
+local State = {
+    Groups = {}, -- { [Path] = { Name, Type, Logs = { ... } } }
+    SelectedPath = nil,
+    SelectedLog = nil,
+    TotalFired = 0,
+    Visible = true
+}
+
+-- Helpers
+local function Create(cls, props)
+    local inst = Instance.new(cls)
+    for k, v in pairs(props) do inst[k] = v end
+    return inst
 end
 
-local function notify(title, msg)
-    print("[RBK] " .. title .. ": " .. msg) -- Console Backup
-    local g = CoreGui:FindFirstChild("RbkNotify") or create("ScreenGui", {Name="RbkNotify"}, CoreGui)
-    local f = create("Frame", {Size=UDim2.new(0,250,0,60), Position=UDim2.new(1,10,1,-70), BackgroundColor3=Theme.Secondary}, g)
-    create("UICorner", {CornerRadius=UDim.new(0,8)}, f)
-    create("TextLabel", {Text=title, Size=UDim2.new(1,-20,0,25), Position=UDim2.new(0,12,0,5), TextColor3=Theme.Accent, Font="GothamBold", TextSize=14, BackgroundTransparency=1, TextXAlignment="Left"}, f)
-    create("TextLabel", {Text=msg, Size=UDim2.new(1,-20,0,25), Position=UDim2.new(0,12,0,28), TextColor3=Theme.Text, Font="Gotham", TextSize=11, BackgroundTransparency=1, TextXAlignment="Left"}, f)
-    TweenService:Create(f, TweenInfo.new(0.4), {Position=UDim2.new(1,-260,1,-70)}):Play()
-    task.delay(4, function() pcall(function() f:Destroy() end) end)
+local function MakeCorner(p, r)
+    local c = Instance.new("UICorner", p)
+    c.CornerRadius = r or UDim.new(0, 7)
+    return c
 end
 
--- ============================================================
--- MAIN SPY INTERFACE
--- ============================================================
+local function MakeStroke(p, c, t)
+    local s = Instance.new("UIStroke", p)
+    s.Color = c or Theme.Border
+    s.Thickness = t or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    return s
+end
 
-local function startSpy()
-    local Gui = create("ScreenGui", {Name="RbkSpyV6", ResetOnSpawn=false}, CoreGui)
-    local Main = create("Frame", {Size=UDim2.new(0,600,0,400), Position=UDim2.new(0.5,-300,0.5,-200), BackgroundColor3=Theme.Main, Active=true}, Gui)
-    create("UICorner", {CornerRadius=UDim.new(0,10)}, Main)
-    create("UIStroke", {Color=Theme.Accent, Thickness=1.5, Transparency=0.5}, Main)
-
-    local Header = create("Frame", {Size=UDim2.new(1,0,0,40), BackgroundColor3=Theme.Secondary}, Main)
-    create("UICorner", {CornerRadius=UDim.new(0,10)}, Header)
-    create("TextLabel", {Text="RBK REMOTE SPY V6 (FIXED)", Size=UDim2.new(1,0,1,0), Position=UDim2.new(0,15,0,0), TextColor3=Theme.Accent, Font="GothamBold", TextSize=14, BackgroundTransparency=1, TextXAlignment="Left"}, Header)
-
-    local CloseBtn = create("TextButton", {Text="✕", Size=UDim2.new(0,30,0,30), Position=UDim2.new(1,-35,0,5), BackgroundColor3=Color3.fromRGB(150,50,50), TextColor3=Color3.new(1,1,1), Font="GothamBold"}, Header)
-    create("UICorner", {CornerRadius=UDim.new(1,0)}, CloseBtn)
-
-    local ListScroll = create("ScrollingFrame", {Size=UDim2.new(0.35,-10,1,-50), Position=UDim2.new(0,5,0,45), BackgroundTransparency=1, ScrollBarThickness=2, CanvasSize=UDim2.new(0,0,0,0)}, Main)
-    create("UIListLayout", {Padding=UDim.new(0,4)}, ListScroll)
-
-    local CodeBox = create("TextBox", {MultiLine=true, TextEditable=true, ClearTextOnFocus=false, Size=UDim2.new(0.65,-10,0.8,-10), Position=UDim2.new(0.35,5,0,45), BackgroundColor3=Theme.Secondary, TextColor3=Theme.Text, Font="Code", TextSize=11, TextXAlignment="Left", TextYAlignment="Top", Text="-- Waiting for items..."}, Main)
-    create("UICorner", {CornerRadius=UDim.new(0,8)}, CodeBox)
-
-    local RunBtn = create("TextButton", {Text="RUN REMOTE", Size=UDim2.new(0.65,-10,0.15,-5), Position=UDim2.new(0.35,5,0.85,0), BackgroundColor3=Theme.Accent, TextColor3=Theme.Main, Font="GothamBold", TextSize=12}, Main)
-    create("UICorner", {CornerRadius=UDim.new(0,8)}, RunBtn)
-
-    -- Draggable
-    local d, i, sp, ds
-    Header.InputBegan:Connect(function(e) if e.UserInputType == Enum.UserInputType.MouseButton1 then d=true ds=e.Position sp=Main.Position end end)
-    UserInputService.InputChanged:Connect(function(e) if d and e.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = e.Position - ds
-        Main.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y)
-    end end)
-    UserInputService.InputEnded:Connect(function(e) d=false end)
-
-    -- CORE LOGIC
-    local activeLog = nil
-
-    local function getPath(ins)
-        local s, r = pcall(function()
-            local p = ins.Name
-            local cur = ins.Parent
-            while cur and cur ~= game do p = cur.Name .. "." .. p cur = cur.Parent end
-            return "game." .. p
-        end)
-        return s and r or "UnknownPath"
-    end
-
-    local function format(v, visited)
-        visited = visited or {}
-        if type(v) == "string" then return '"'..v..'"'
-        elseif type(v) == "table" then
-            if visited[v] then return "{Recursive}" end visited[v]=true
-            local s = "{" for k,val in pairs(v) do s = s.."["..format(k,visited).."]="..format(val,visited).."," end
-            return s .. "}"
-        else return tostring(v) end
-    end
-
-    local function onEntry(remote, method, args)
-        if not getgenv().RbkConfig.Enabled then return end
-        local rName = tostring(remote)
-        local time = os.date("%X")
-        local data = {Remote=remote, Method=method, Args=args, Path=getPath(remote)}
-
-        task.spawn(function()
-            local b = create("TextButton", {
-                Text = "["..time.."] "..rName, Size=UDim2.new(1,0,0,25),
-                BackgroundColor3=Color3.fromRGB(35,35,40), TextColor3=Theme.Accent,
-                Font="Gotham", TextSize=10, Parent=ListScroll
-            })
-            create("UICorner", {CornerRadius=UDim.new(0,4)}, b)
-
-            b.MouseButton1Click:Connect(function()
-                activeLog = data
-                local s = {} for _, v in ipairs(args) do table.insert(s, format(v)) end
-                CodeBox.Text = string.format("local remote = %s\nlocal args = {%s}\nremote:%s(unpack(args))", data.Path, table.concat(s, ", "), method)
-            end)
-            ListScroll.CanvasSize = UDim2.new(0,0,0,ListScroll.UIListLayout.AbsoluteContentSize.Y)
-        end)
-    end
-
-    -- THE HOOK (STABLE VERSION)
-    print("[RBK] Initializing Hooks...")
-    local raw_mt = getrawmetatable(game)
-    setreadonly(raw_mt, false)
-    local old_nc = raw_mt.__namecall
-
-    raw_mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "FireServer" or method == "InvokeServer" then
-            onEntry(self, method, {...})
+local function Serialize(val, seen)
+    seen = seen or {}
+    local t = typeof(val)
+    if t == "table" then
+        if seen[val] then return "{RECURSIVE}" end
+        seen[val] = true
+        local s = "{"
+        local first = true
+        for k, v in pairs(val) do
+            if not first then s = s .. ", " end
+            s = s .. "[" .. Serialize(k, seen) .. "] = " .. Serialize(v, seen)
+            first = false
         end
-        return old_nc(self, ...)
-    end)
-
-    -- Proto Hooks (Backup)
-    local old_fire; old_fire = hookfunction(Instance.new("RemoteEvent").FireServer, function(self, ...)
-        onEntry(self, "FireServer", {...})
-        return old_fire(self, ...)
-    end)
-
-    local old_invoke; old_invoke = hookfunction(Instance.new("RemoteFunction").InvokeServer, function(self, ...)
-        onEntry(self, "InvokeServer", {...})
-        return old_invoke(self, ...)
-    end)
-
-    setreadonly(raw_mt, true)
-
-    -- BUTTONS
-    RunBtn.MouseButton1Click:Connect(function()
-        local func, err = loadstring(CodeBox.Text)
-        if func then pcall(func) notify("Success", "Remote fired!") else notify("Error", err) end
-    end)
-    CloseBtn.MouseButton1Click:Connect(function() Gui:Destroy() getgenv().RbkConfig.Enabled = false end)
-
-    notify("Spy V6 Ready", "Hooks successfully connected. Waiting for network traffic.")
-    warn("[RBK] REMOTE SPY V6 VIRTUALIZED.")
+        return s .. "}"
+    elseif t == "string" then return '"' .. val .. '"'
+    elseif t == "Instance" then return val:GetFullName()
+    elseif t == "Vector3" then return string.format("Vector3.new(%.2f, %.2f, %.2f)", val.X, val.Y, val.Z)
+    elseif t == "CFrame" then return "CFrame.new(...)"
+    else return tostring(val) end
 end
 
--- ============================================================
--- GATEKEEPER
--- ============================================================
+-- UI Structure
+local ScreenGui = Create("ScreenGui", { Name = "RSpy_Ultimate_V3", Parent = ParentUI, IgnoreGuiInset = true })
+local MainFrame = Create("Frame", {
+    Name = "MainFrame",
+    Parent = ScreenGui,
+    Size = UDim2.new(0, 800, 0, 480),
+    Position = UDim2.new(0.5, -400, 0.5, -240),
+    BackgroundColor3 = Theme.Bg,
+    Active = true
+})
+MakeCorner(MainFrame, UDim.new(0, 10))
+MakeStroke(MainFrame, Theme.Accent, 1.2).Transparency = 0.5
 
-local function showGate()
-    local g = create("ScreenGui", {Name="RbkKey"}, CoreGui)
-    local m = create("Frame", {Size=UDim2.new(0,300,0,180), Position=UDim2.new(0.5,-150,0.5,-90), BackgroundColor3=Theme.Main}, g)
-    create("UICorner", {CornerRadius=UDim.new(0,10)}, m)
-    create("TextLabel", {Text="SECURITY CHECK", Size=UDim2.new(1,0,0,40), TextColor3=Theme.Accent, Font="GothamBold", TextSize=16, BackgroundTransparency=1}, m)
+-- [SIDEBAR: Remote List]
+local Sidebar = Create("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(0, 220, 1, -20),
+    Position = UDim2.new(0, 10, 0, 10),
+    BackgroundColor3 = Theme.Sidebar
+})
+MakeCorner(Sidebar)
+MakeStroke(Sidebar)
+
+local SidebarTitle = Create("TextLabel", {
+    Parent = Sidebar, Size = UDim2.new(1, 0, 0, 30), Text = " REMOTES DETECTED",
+    TextColor3 = Theme.Accent, Font = Font, TextSize = 12, TextXAlignment = "Left", BackgroundTransparency = 1
+})
+
+local SidebarScroll = Create("ScrollingFrame", {
+    Parent = Sidebar, Size = UDim2.new(1, -10, 1, -40), Position = UDim2.new(0, 5, 0, 35),
+    BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = Theme.Accent
+})
+local SidebarLayout = Create("UIListLayout", { Parent = SidebarScroll, Padding = UDim.new(0, 4) })
+
+-- [LOGS PANEL: Specific Remote History]
+local LogsPanel = Create("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(0, 280, 1, -20),
+    Position = UDim2.new(0, 240, 0, 10),
+    BackgroundColor3 = Theme.Main
+})
+MakeCorner(LogsPanel)
+MakeStroke(LogsPanel)
+
+local LogsTitle = Create("TextLabel", {
+    Parent = LogsPanel, Size = UDim2.new(1, 0, 0, 30), Text = " HISTORY",
+    TextColor3 = Theme.Text, Font = Font, TextSize = 12, TextXAlignment = "Center", BackgroundTransparency = 1
+})
+
+local LogsScroll = Create("ScrollingFrame", {
+    Parent = LogsPanel, Size = UDim2.new(1, -10, 1, -40), Position = UDim2.new(0, 5, 0, 35),
+    BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = Theme.Accent
+})
+local LogsLayout = Create("UIListLayout", { Parent = LogsScroll, Padding = UDim.new(0, 4), SortOrder = "LayoutOrder" })
+
+-- [INSPECTOR: Data View]
+local Inspector = Create("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(1, -540, 1, -20),
+    Position = UDim2.new(0, 530, 0, 10),
+    BackgroundColor3 = Theme.Sidebar
+})
+MakeCorner(Inspector)
+MakeStroke(Inspector)
+
+local InspectScroll = Create("ScrollingFrame", {
+    Parent = Inspector, Size = UDim2.new(1, -20, 1, -60), Position = UDim2.new(0, 10, 0, 10),
+    BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = Theme.Accent
+})
+local InspectBox = Create("TextBox", {
+    Parent = InspectScroll, Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+    TextColor3 = Theme.Muted, TextSize = 12, Font = Font, TextXAlignment = "Left", TextYAlignment = "Top",
+    TextWrapped = true, ReadOnly = true, MultiLine = true, ClearTextOnFocus = false, Text = "-- Click a log --"
+})
+
+-- Actions
+local ActionFrame = Create("Frame", {
+    Parent = Inspector, Size = UDim2.new(1, -20, 0, 35), Position = UDim2.new(0, 10, 1, -45), BackgroundTransparency = 1
+})
+local function AddActionBtn(txt, cb, col)
+    local b = Create("TextButton", {
+        Parent = ActionFrame, Size = UDim2.new(0.5, -4, 1, 0), BackgroundColor3 = col or Theme.Bg,
+        Text = txt, TextColor3 = Theme.Text, Font = Font, TextSize = 11
+    })
+    MakeCorner(b, UDim.new(0, 6))
+    MakeStroke(b)
+    b.MouseButton1Click:Connect(cb)
+    return b
+end
+
+AddActionBtn("COPY CODE", function()
+    if State.SelectedLog and setclipboard then
+        local log = State.SelectedLog
+        local s = string.format("-- Remote Spy v3\nlocal remote = %s\nlocal args = {\n", "game." .. State.SelectedPath)
+        for _, v in ipairs(log.Args) do s = s .. "    " .. Serialize(v) .. ",\n" end
+        s = s .. "}\n" .. (log.Type == "RemoteFunction" and "remote:InvokeServer" or "remote:FireServer") .. "(unpack(args))"
+        setclipboard(s)
+    end
+end, Theme.AccentSecondary)
+
+-- RENDERING LOGIC
+
+local function UpdateInspector(log)
+    State.SelectedLog = log
+    local s = string.format("-- %s --\n", log.Type:upper())
+    s = s .. "Time: " .. log.Time .. "\n\n-- ARGS --\n"
+    for i, v in ipairs(log.Args) do s = s .. string.format("[%d] (%s) = %s\n", i, typeof(v), Serialize(v)) end
+    s = s .. "\n-- STACK --\n" .. log.Stack
+    InspectBox.Text = s
+    InspectBox.TextColor3 = Theme.Text
+    InspectScroll.CanvasSize = UDim2.new(0, 0, 0, InspectBox.TextBounds.Y + 20)
+end
+
+local function RenderHistory(path)
+    for _, v in pairs(LogsScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    local group = State.Groups[path]
+    if not group then return end
     
-    local i = create("TextBox", {PlaceholderText="Key Here", Size=UDim2.new(0.8,0,0,35), Position=UDim2.new(0.1,0,0,55), BackgroundColor3=Theme.Secondary, TextColor3=Theme.Text, Font="Gotham", TextSize=14}, m)
-    create("UICorner", {CornerRadius=UDim.new(0,6)}, i)
+    LogsTitle.Text = group.Name:upper() .. " HISTORY"
+    
+    for i, log in ipairs(group.Logs) do
+        local b = Create("TextButton", {
+            Parent = LogsScroll, Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = Theme.Bg,
+            Text = "  [" .. log.Time .. "] Call #" .. i, TextColor3 = Theme.Text, Font = Font,
+            TextSize = 11, TextXAlignment = "Left", LayoutOrder = -i
+        })
+        MakeCorner(b)
+        MakeStroke(b)
+        b.MouseButton1Click:Connect(function() UpdateInspector(log) end)
+    end
+    LogsScroll.CanvasSize = UDim2.new(0,0,0,LogsLayout.AbsoluteContentSize.Y + 10)
+end
 
-    local b = create("TextButton", {Text="LOGIN", Size=UDim2.new(0.35,0,0,30), Position=UDim2.new(0.1,0,0,105), BackgroundColor3=Theme.Accent, TextColor3=Theme.Main, Font="GothamBold"}, m)
-    create("UICorner", {CornerRadius=UDim.new(0,6)}, b)
+local function GetRemotePath(obj)
+    local p = obj.Name
+    local cur = obj.Parent
+    while cur and cur ~= game do
+        p = cur.Name .. "." .. p
+        cur = cur.Parent
+    end
+    return p
+end
 
-    local k = create("TextButton", {Text="GET KEY", Size=UDim2.new(0.35,0,0,30), Position=UDim2.new(0.55,0,0,105), BackgroundColor3=Theme.Secondary, TextColor3=Theme.Accent, Font="GothamBold"}, m)
-    create("UICorner", {CornerRadius=UDim.new(0,6)}, k)
-
-    k.MouseButton1Click:Connect(function() setclipboard(KEY_SITE) notify("Copied", "Link copied to clipboard.") end)
-    b.MouseButton1Click:Connect(function()
-        if i.Text == VALID_KEY then
-            g:Destroy()
-            startSpy()
-        else notify("Denied", "Wrong access key.") end
+local function LogCapture(remote, args, isFunc)
+    pcall(function()
+        local path = GetRemotePath(remote)
+        if not State.Groups[path] then
+            -- Create Sidebar Entry
+            State.Groups[path] = { Name = remote.Name, Type = (isFunc and "RemoteFunction" or "RemoteEvent"), Logs = {} }
+            
+            local b = Create("TextButton", {
+                Parent = SidebarScroll, Size = UDim2.new(1, 0, 0, 35), BackgroundColor3 = Theme.Bg,
+                Text = "  " .. remote.Name, TextColor3 = isFunc and Theme.RemoteFunction or Theme.RemoteEvent,
+                Font = Font, TextSize = 11, TextXAlignment = "Left"
+            })
+            MakeCorner(b)
+            MakeStroke(b)
+            
+            b.MouseButton1Click:Connect(function()
+                State.SelectedPath = path
+                RenderHistory(path)
+            end)
+            SidebarScroll.CanvasSize = UDim2.new(0,0,0,SidebarLayout.AbsoluteContentSize.Y + 10)
+        end
+        
+        local log = {
+            Time = os.date("%X"),
+            Args = args,
+            Type = State.Groups[path].Type,
+            Stack = debug.traceback()
+        }
+        
+        table.insert(State.Groups[path].Logs, log)
+        if #State.Groups[path].Logs > 100 then table.remove(State.Groups[path].Logs, 1) end
+        
+        if State.SelectedPath == path then
+            RenderHistory(path)
+        end
     end)
 end
 
-showGate()
+-- HOOKING
+local mt = getrawmetatable(game)
+local oldNC = mt.__namecall
+local oldIdx = mt.__index
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local m = getnamecallmethod()
+    if (m == "FireServer" or m == "InvokeServer") then
+        task.spawn(LogCapture, self, {...}, m == "InvokeServer")
+    end
+    return oldNC(self, ...)
+end)
+
+mt.__index = newcclosure(function(self, k)
+    if (k == "FireServer" or k == "InvokeServer") then
+        if self:IsA("RemoteEvent") or self:IsA("RemoteFunction") then
+            return newcclosure(function(rem, ...)
+                task.spawn(LogCapture, rem, {...}, k == "InvokeServer")
+                return oldIdx(rem, k)(rem, ...)
+            end)
+        end
+    end
+    return oldIdx(self, k)
+end)
+setreadonly(mt, true)
+
+-- Dragging
+local function EnableDrag(obj)
+    local dragToggle, dragInput, dragStart, startPos
+    obj.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragToggle = true; dragStart = input.Position; startPos = obj.Position
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragToggle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragToggle = false end end)
+end
+EnableDrag(MainFrame)
+
+print("[REMOTE SPY V3] Multi-Tab Grouping Active.")
